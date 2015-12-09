@@ -31,20 +31,20 @@ class MultiqcModule(BaseMultiqcModule):
     def __init__(self):
 
         # Initialise the parent object
-        super(MultiqcModule, self).__init__(name='FastQC', anchor='fastqc', 
-        href="http://www.bioinformatics.babraham.ac.uk/projects/fastqc/", 
+        super(MultiqcModule, self).__init__(name='FastQC', anchor='fastqc',
+        href="http://www.bioinformatics.babraham.ac.uk/projects/fastqc/",
         info="is a quality control tool for high throughput sequence data,"\
         " written by Simon Andrews at the Babraham Institute in Cambridge.")
 
         self.fastqc_data = defaultdict(lambda: defaultdict(lambda: defaultdict( lambda: defaultdict() ) ) )
         self.fastqc_stats = dict()
         self.fastqc_statuses = defaultdict(lambda: defaultdict())
-        
+
         # Find and parse unzipped FastQC reports
         for f in self.find_log_files('fastqc_data.txt'):
             s_name = self.clean_s_name(os.path.basename(f['root']), os.path.dirname(f['root']))
             self.parse_fastqc_report(f['f'], s_name, f['root'])
-        
+
         # Find and parse zipped FastQC reports
         for f in self.find_log_files('_fastqc.zip', filecontents=False):
             s_name = f['fn'].rstrip('_fastqc.zip')
@@ -66,7 +66,7 @@ class MultiqcModule(BaseMultiqcModule):
             raise UserWarning
 
         log.info("Found {} reports".format(len(self.fastqc_stats)))
-        
+
         # Add to self.css and self.js to be included in template
         self.css = {
             'assets/css/multiqc_fastqc.css' : os.path.realpath(os.path.join(os.path.dirname(__file__), 'assets', 'css', 'multiqc_fastqc.css'))
@@ -74,7 +74,7 @@ class MultiqcModule(BaseMultiqcModule):
         self.js = {
             'assets/js/multiqc_fastqc.js' : os.path.realpath(os.path.join(os.path.dirname(__file__), 'assets', 'js', 'multiqc_fastqc.js'))
         }
-        
+
         # Colours to be used for plotting lines
         self.status_colours = {
             'pass': '#5cb85c',
@@ -82,19 +82,29 @@ class MultiqcModule(BaseMultiqcModule):
             'fail': '#d9534f',
             'default': '#999'
         }
-        
+
         # Add to the general statistics table
         self.fastqc_stats_table()
-        
+
+        for x in self.fastqc_statuses:
+            print (x)
+            for y in self.fastqc_statuses[x]:
+                print (y,':',self.fastqc_statuses[x][y])
+
+        for x in self.fastqc_stats:
+            print (x)
+            for y in self.fastqc_stats[x]:
+                print (y,':',self.fastqc_stats[x][y])
+
         # Write the basic stats table data to a file
         self.write_csv_file(self.fastqc_stats, 'multiqc_fastqc.txt')
-        
+
         # Add the statuses to the intro for multiqc_fastqc.js JavaScript to pick up
         self.intro += '<script type="text/javascript">fastqc_passfails = {};</script>'.format(json.dumps(self.fastqc_statuses))
-        
+
         # Start the sections
         self.sections = list()
-        
+
         # Now add each section in order by calling its def
         self.sequence_quality_plot()
         self.per_seq_quality_plot()
@@ -110,7 +120,7 @@ class MultiqcModule(BaseMultiqcModule):
         """ Takes contetns from a fastq_data.txt file and parses out required
         statistics and data. Returns a dict with keys 'stats' and 'data'.
         Data is for plotting graphs, stats are for top table. """
-        
+
         section_headings = {
             'sequence_quality': r'>>Per base sequence quality\s+(pass|warn|fail)',
             'per_seq_quality':  r'>>Per sequence quality scores\s+(pass|warn|fail)',
@@ -127,12 +137,12 @@ class MultiqcModule(BaseMultiqcModule):
             'percent_gc':         r"%GC\s+(\d+)",
             'percent_dedup':      r"#Total Deduplicated Percentage\s+([\d\.]+)",
         }
-        
+
         # Make the sample name from the input filename if we find it
         fn_search = re.search(r"Filename\s+(.+)", file_contents)
         if fn_search:
             s_name = self.clean_s_name(fn_search.group(1) , root)
-        
+
         # Throw a warning if we already have this sample and remove prev data
         # Unzipped reports means that this can be quite frequent
         # This gives a good idea of how horribly messy this module has become
@@ -150,12 +160,12 @@ class MultiqcModule(BaseMultiqcModule):
                             self.fastqc_data[k].pop(s, None)
                 else :
                     self.fastqc_data[k].pop(s_name, None)
-                
+
             for k in self.fastqc_statuses:
                 self.fastqc_statuses[k].pop(s_name, None)
             self.fastqc_stats.pop(s_name, None)
             log.debug("Duplicate sample name found! Overwriting: {}".format(s_name))
-        
+
         s = defaultdict(lambda: dict())
         s['seq_len_bp'] = 0
         s['seq_len_read_count'] = 0
@@ -163,7 +173,7 @@ class MultiqcModule(BaseMultiqcModule):
         adapter_types = []
         in_module = None
         for l in file_contents.splitlines():
-            
+
             # Search for general stats
             for k, r in stats_regexes.items():
                 r_search = re.search(r, l)
@@ -171,14 +181,14 @@ class MultiqcModule(BaseMultiqcModule):
                     try:
                         s[k] = float(r_search.group(1))
                     except ValueError:
-                        s[k] = r_search.group(1)                        
-            
+                        s[k] = r_search.group(1)
+
             # Parse modules
             if in_module is not None:
                 if l == ">>END_MODULE":
                     in_module = None
                 else:
-                    
+
                     if in_module == 'sequence_quality':
                         quals = re.search("([\d-]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)", l)
                         if quals:
@@ -189,15 +199,15 @@ class MultiqcModule(BaseMultiqcModule):
                                     self.fastqc_data['sequence_quality'][g][s_name][bp] = float(quals.group( idx + 1 ))
                                 except:
                                     self.fastqc_data['sequence_quality'][g][s_name][bp] = quals.group( idx + 1 )
-                                    
-                    
+
+
                     if in_module == 'per_seq_quality' or in_module == 'n_content':
                         sections  = l.split()
                         try:
                             self.fastqc_data[in_module][s_name][float(sections[0])] = float(sections[1])
                         except ValueError:
                             pass # First line - headers
-                    
+
                     if in_module == 'sequence_content':
                         l.replace('NaN','0')
                         seq_matches = re.search("([\d-]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)", l)
@@ -209,12 +219,12 @@ class MultiqcModule(BaseMultiqcModule):
                                     self.fastqc_data['sequence_content'][s_name][bp][g] = seq_matches.group( idx + 1 )
                                 else:
                                     self.fastqc_data['sequence_content'][s_name][bp][g] = float(seq_matches.group( idx + 1 ))
-                    
+
                     if in_module == 'gc_content':
                         gc_matches = re.search("([\d]+)\s+([\d\.E]+)", l)
                         if gc_matches:
                             self.fastqc_data['gc_content'][s_name][int(gc_matches.group(1))] = float(gc_matches.group(2))
-                    
+
                     if in_module == 'seq_length_dist':
                         len_matches = re.search("([\d-]+)\s+([\d\.E]+)", l)
                         if len_matches:
@@ -223,7 +233,7 @@ class MultiqcModule(BaseMultiqcModule):
                             self.seq_lengths.add(bp)
                             s['seq_len_bp'] += float(len_matches.group(2)) * bp
                             s['seq_len_read_count'] += float(len_matches.group(2))
-                    
+
                     if in_module == 'seq_dup_levels':
                         if l[:1] == '#':
                             # Start of module - replace default dict with an OrderedDict
@@ -232,7 +242,7 @@ class MultiqcModule(BaseMultiqcModule):
                         sections  = l.split()
                         self.fastqc_data['seq_dup_levels_dedup'][s_name][sections[0]] = float(sections[1])
                         self.fastqc_data['seq_dup_levels'][s_name][sections[0]] = float(sections[2])
-        
+
                     if in_module == 'adapter_content':
                         if l[:1] == '#':
                             adapter_types = l[1:].split("\t")[1:]
@@ -243,7 +253,7 @@ class MultiqcModule(BaseMultiqcModule):
                                 a = adapter_types[idx]
                                 k = "{} - {}".format(s_name, a)
                                 self.fastqc_data['adapter_content'][k][pos] = float(val)
-                                            
+
             else:
                 # See if this is the start of a new section
                 for k, r in section_headings.items():
@@ -252,22 +262,22 @@ class MultiqcModule(BaseMultiqcModule):
                         in_module = k
                         # Add to the global statuses dict
                         self.fastqc_statuses[k][s_name] = r_search.group(1)
-        
+
         # Work out the average sequence length
         if s['seq_len_read_count'] > 0:
             s['avg_sequence_length'] = s['seq_len_bp'] / s['seq_len_read_count']
-        
+
         # Get percent duplicates (percent unique given)
         if 'percent_dedup' in s:
             s['percent_duplicates'] = 100 - s['percent_dedup']
-        
+
         # Add parsed stats to dicts
         self.fastqc_stats[s_name] = s
 
     def fastqc_stats_table(self):
         """ Add some single-number stats to the basic statistics
         table at the top of the report """
-        
+
         headers = OrderedDict()
         headers['percent_duplicates'] = {
             'title': '% Dups',
@@ -307,8 +317,8 @@ class MultiqcModule(BaseMultiqcModule):
         """ Create the HTML for the phred quality score plot """
         if 'sequence_quality' not in self.fastqc_data or len(self.fastqc_data['sequence_quality']) == 0:
             log.debug('sequence_quality not found in FastQC reports')
-            return None    
-        
+            return None
+
         pconfig = {
             'id': 'fastqc_sequence_quality_plot',
             'title': 'Mean Quality Scores',
@@ -328,7 +338,7 @@ class MultiqcModule(BaseMultiqcModule):
             'name': 'Sequence Quality Histograms',
             'anchor': 'fastqc_sequence_quality',
             'content': '<p>The mean quality value across each base position in the read. ' +
-                        'See the <a href="http://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/2%20Per%20Base%20Sequence%20Quality.html" target="_bkank">FastQC help</a>.</p>' + 
+                        'See the <a href="http://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/2%20Per%20Base%20Sequence%20Quality.html" target="_bkank">FastQC help</a>.</p>' +
                         self.plot_xy_data(self.fastqc_data['sequence_quality']['mean'], pconfig)
         })
 
@@ -338,7 +348,7 @@ class MultiqcModule(BaseMultiqcModule):
         if 'per_seq_quality' not in self.fastqc_data or len(self.fastqc_data['per_seq_quality']) == 0:
             log.debug('per_seq_quality not found in FastQC reports')
             return None
-        
+
         pconfig = {
             'id': 'fastqc_per_seq_quality_plot',
             'title': 'Per Sequence Quality Scores',
@@ -363,19 +373,19 @@ class MultiqcModule(BaseMultiqcModule):
                         self.plot_xy_data(self.fastqc_data['per_seq_quality'], pconfig)
         })
 
-    
+
     def sequence_content_plot (self):
         """ Create the epic HTML for the FastQC sequence content heatmap """
         if 'sequence_content' not in self.fastqc_data or len(self.fastqc_data['sequence_content']) == 0:
             log.debug('sequence_content not found in FastQC reports')
             return None
-        
+
         html =  '<p>The proportion of each base position for which each of the four normal DNA bases has been called. \
                     See the <a href="http://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/4%20Per%20Base%20Sequence%20Content.html" target="_bkank">FastQC help</a>.</p>'
-        
+
         # Order the data by the sample names
         data = OrderedDict(sorted(self.fastqc_data['sequence_content'].items()))
-        
+
         html += '<div id="fastqc_sequence_content_plot"> \n\
             <h5><span class="s_name"><em class="text-muted">rollover for sample name</em></span></h5> \n\
             <div class="fastqc_seq_heatmap_key">\n\
@@ -396,20 +406,20 @@ class MultiqcModule(BaseMultiqcModule):
             fastqc_seq_content_data = {d};\n\
             $(function () {{ fastqc_seq_content_heatmap(); }}); \n\
         </script>'.format(d=json.dumps(data))
-        
+
         self.sections.append({
             'name': 'Per Base Sequence Content',
             'anchor': 'fastqc_sequence_content',
             'content': html
         })
-    
-    
+
+
     def gc_content_plot (self):
-        """ Create the HTML for the FastQC GC content plot """        
+        """ Create the HTML for the FastQC GC content plot """
         if 'gc_content' not in self.fastqc_data or len(self.fastqc_data['gc_content']) == 0:
             log.debug('gc_content not found in FastQC reports')
             return None
-        
+
         pconfig = {
             'id': 'fastqc_gc_content_plot',
             'title': 'Per Sequence GC Content',
@@ -429,14 +439,14 @@ class MultiqcModule(BaseMultiqcModule):
                         'See the <a href="http://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/5%20Per%20Sequence%20GC%20Content.html" target="_bkank">FastQC help</a>.</p>' +
                         self.plot_xy_data(self.fastqc_data['gc_content'], pconfig)
         })
-    
-    
+
+
     def n_content_plot (self):
         """ Create the HTML for the per base N content plot """
         if 'n_content' not in self.fastqc_data or len(self.fastqc_data['n_content']) == 0:
             log.debug('n_content not found in FastQC reports')
             return None
-        
+
         pconfig = {
             'id': 'fastqc_n_content_plot',
             'title': 'Per Base N Content',
@@ -455,7 +465,7 @@ class MultiqcModule(BaseMultiqcModule):
                 {'from': 0, 'to': 5, 'color': '#c3e6c3'},
             ]
         }
-    
+
         self.sections.append({
             'name': 'Per Base N Content',
             'anchor': 'fastqc_n_content',
@@ -463,14 +473,14 @@ class MultiqcModule(BaseMultiqcModule):
                         'See the <a href="http://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/6%20Per%20Base%20N%20Content.html" target="_bkank">FastQC help</a>.</p>' +
                         self.plot_xy_data(self.fastqc_data['n_content'], pconfig)
         })
-    
-    
+
+
     def seq_length_dist_plot (self):
         """ Create the HTML for the Sequence Length Distribution plot """
         if 'seq_length_dist' not in self.fastqc_data or len(self.fastqc_data['seq_length_dist']) == 0:
             log.debug('seq_length_dist not found in FastQC reports')
             return None
-        
+
         if len(self.seq_lengths) < 2:
             html = '<p>All samples have sequences of exactly {} bp in length.</p>'.format(list(self.seq_lengths)[0])
         else:
@@ -488,20 +498,20 @@ class MultiqcModule(BaseMultiqcModule):
             html =  '<p>The distribution of fragment sizes (read lengths) found. \
                 See the <a href="http://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/7%20Sequence%20Length%20Distribution.html" target="_bkank">FastQC help</a>.</p>'
             html += self.plot_xy_data(self.fastqc_data['seq_length_dist'], pconfig)
-    
+
         self.sections.append({
             'name': 'Sequence Length Distribution',
             'anchor': 'fastqc_seq_length_dist',
             'content': html
         })
-    
-    
+
+
     def seq_dup_levels_plot (self):
         """ Create the HTML for the Sequence Duplication Levels plot """
         if 'seq_dup_levels' not in self.fastqc_data or len(self.fastqc_data['seq_dup_levels']) == 0:
             log.debug('seq_dup_levels not found in FastQC reports')
             return None
-        
+
         pconfig = {
             'id': 'fastqc_seq_dup_levels_plot',
             'title': 'Sequence Duplication Levels',
@@ -514,7 +524,7 @@ class MultiqcModule(BaseMultiqcModule):
             'colors': self.get_status_cols('seq_dup_levels'),
             'tt_label': '<b>{point.x}</b>: {point.y:.1f}%',
         }
-    
+
         self.sections.append({
             'name': 'Sequence Duplication Levels',
             'anchor': 'fastqc_seq_dup_levels',
@@ -522,15 +532,15 @@ class MultiqcModule(BaseMultiqcModule):
                         'See the <a href="http://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/8%20Duplicate%20Sequences.html" target="_bkank">FastQC help</a>.</p>' +
                         self.plot_xy_data(self.fastqc_data['seq_dup_levels'], pconfig)
         })
-        
-        
-    
+
+
+
     def adapter_content_plot (self):
         """ Create the HTML for the FastQC adapter plot """
         if 'adapter_content' not in self.fastqc_data or len(self.fastqc_data['adapter_content']) == 0:
             log.debug('adapter_content not found in FastQC reports')
             return None
-        
+
         pconfig = {
             'id': 'fastqc_adapter_content_plot',
             'title': 'Adapter Content',
@@ -552,7 +562,7 @@ class MultiqcModule(BaseMultiqcModule):
         # possible to break down pass / warn / fail for each adapter, which
         # could lead to misleading labelling (fails on adapter types with
         # little or no contamination)
-        
+
         self.sections.append({
             'name': 'Adapter Content',
             'anchor': 'fastqc_adapter_content',
@@ -560,19 +570,19 @@ class MultiqcModule(BaseMultiqcModule):
                         'See the <a href="http://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/10%20Adapter%20Content.html" target="_bkank">FastQC help</a>.</p>' +
                         self.plot_xy_data(self.fastqc_data['adapter_content'], pconfig)
         })
-    
+
 
     def avg_bp_from_range(self, bp):
         """ Helper function - FastQC often gives base pair ranges (eg. 10-15)
         which are not helpful when plotting. This returns the average from such
         ranges as an int, which is helpful. If not a range, just returns the int """
-        
+
         if '-' in bp:
             maxlen = float(bp.split("-",1)[1])
             minlen = float(bp.split("-",1)[0])
             bp = ((maxlen - minlen)/2) + minlen
         return(int(bp))
-    
+
     def get_status_cols(self, key):
         """ Helper function - returns a list of colours according to the FastQC
         status of this module for each sample. """
@@ -580,4 +590,3 @@ class MultiqcModule(BaseMultiqcModule):
         for s_name, status in self.fastqc_statuses[key].items():
             colours[s_name] = self.status_colours.get(status, self.status_colours['default'])
         return colours
-    
